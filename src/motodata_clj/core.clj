@@ -1,8 +1,12 @@
 (ns motodata-clj.core
   (:require [motodata-clj.parse :as parser]
             [motodata-clj.traverse-files :as files]
-            [motodata-clj.mongo :as db]))
+            [motodata-clj.mongo :as db]
+            [clojure.core.reducers :as r])
+  (:use clojure.pprint
+        [clojure.java.io :only [output-stream]]))
 
+(def errors-file "src/motodata_clj/errors.clj")
 (defn extract-context [file-name]
   (let [[found year number ev-name category session] 
         (re-find #"(?x)
@@ -14,15 +18,35 @@
                  file-name)]
     (and found
          {:year year
-          :category category
           :event-number number
           :event-name ev-name
+          :category category
           :session session})))
 
-(defn parse-dir [dir-name]
-  (->> dir-name
-    files/list-files
-    (map parser/parse)))
+(defn process-file [file]
+  (println file)
+  (let [context (extract-context file)
+        data (parser/parse file)]
+    {:context context
+     :errors (data false)
+     :results (data true)}))
+
+(defn parse-dir [dir-name] 
+  (map process-file (files/list-files dir-name)))
+(defn persist-result [{:keys [context results]}]
+   (map #(db/persist-ride % context) results))
+
+(defn get-err-names [res]
+  (->> res
+       (map :errors)
+       flatten
+       (map #(select-keys % [:first_name :last_name]))
+       set))
 
 (defn -main []
-  (parse-dir "data"))
+  (with-open [o (clojure.java.io/writer "process-log")]
+    (doseq [res (->> "data"
+                     parse-dir
+                     (map persist-result))]
+      (.write o (str res)))))
+

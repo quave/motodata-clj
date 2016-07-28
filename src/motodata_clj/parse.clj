@@ -1,14 +1,16 @@
 (ns motodata-clj.parse
   (:require [clojure.string :as s]
             [motodata-clj.mongo :as db]
-            [motodata-clj.people-map :as pm]))
+            [motodata-clj.people-map :as pm]
+            [clojure.core.reducers :as r]))
 
 (def people (reduce 
               #(into %1 {[(:first_name %2) (:last_name %2)] %2})
               {} (db/get-people)))
 
-(defn find-person [f l]
-  (if-let [p (people [f l])]
+(defn find-person 
+  [{f :first_name l :last_name}]
+  (if-let [p (get people (pm/remap f l))]
     p
     (->> 
       (keys people) 
@@ -16,7 +18,12 @@
               (and (s/starts-with? fir f)
                    (s/starts-with? las l))))
       first
-      seq)))
+      (get people))))
+
+(defn enrich-rider [rider]
+  (if-let [db-rider (find-person rider)]
+    (merge rider db-rider)
+    rider))
 
 (defn head-start? [line] 
   (and (re-find #"^\d{1,2}(\s|$)" line) 
@@ -55,11 +62,21 @@
            (?<last>
            [\u00C0-\u01FF'\-A-Z\s]+
            )\b" head)]
-   {:first-name (-> f (or "") s/trim s/capitalize)
-    :last-name (-> l (or "") s/trim s/capitalize)
+   {:first_name (-> f (or "") s/trim s/capitalize)
+    :last_name (-> l (or "") s/trim s/capitalize)
     :number n
     :team t
     :country c}))
+
+(defn parse-time [time-str] 
+  (if (empty? time-str)
+    nil
+    (let [[_ _ m-str s-str f-str] (re-find #"((\d+)')?(\d+).(\d+)" time-str)
+          m (Integer. (or m-str "0"))
+          s (Integer. s-str)
+          f (Integer. f-str)]
+      (+ (* m 60) s
+         (->> f Math/log10 Math/ceil (Math/pow 10) (/ f))))))
 
 (defn parse-lap [line]
   (let [[_ _ t _ unf _ _ _ t1 _ p1 _ _ t2 _ p2 _ _ t3 _ p3 _ _ speed _ _ p4 _ _ t4]
@@ -90,11 +107,11 @@
                    (?<pit4>(P|PIT)(\s+)?)?
                    (?<t4>(\d{1,2}')?\d{2}\.\d{3})?
                  )?" line)]
-    {:time t
-     :t1 t1
-     :t2 t2
-     :t3 t3
-     :t4 t4
+    {:time (parse-time t)
+     :t1 (parse-time t1)
+     :t2 (parse-time t2)
+     :t3 (parse-time t3)
+     :t4 (parse-time t4)
      :pit (boolean (or p1 p2 p3 p4))
      :unfinished (boolean unf)
      :speed speed}))
@@ -109,21 +126,13 @@
         {:raw-head hl
          :laps (map parse-lap ls)}))))
 
-(defn verify-person 
-  [{f :first-name l :last-name}]
-  (->> [f l]
-    pm/remap
-    find-person
-    boolean))
-
 (defn parse [file-name] 
-  (println file-name)
   (->> file-name
     slurp
     split-pages
     (map refine-page)
     flatten
     split-riders
-    (map parse-rider)
-    (group-by verify-person)))
-
+    (r/map (comp enrich-rider parse-rider))
+    (into [])
+    (group-by #(boolean (:_id %)))))
