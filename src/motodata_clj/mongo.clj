@@ -4,8 +4,8 @@
   (:use clojure.set)
   (:import org.bson.types.ObjectId))
 
-(def conn (mg/connect {:host "172.17.0.5"}))
-(def db (mg/get-db conn "motodata"))
+(comment def conn (mg/connect {:host "172.17.0.5"}))
+(def db :fake) (comment mg/get-db conn "motodata")
 
 (defn persist-ride [rider context]
   (boolean

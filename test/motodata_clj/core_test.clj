@@ -1,7 +1,12 @@
 (ns motodata-clj.core-test
   (:require [clojure.test :refer :all]
-            [motodata-clj.core :refer :all]))
+            [motodata-clj.core :refer :all]
+            [motodata-clj.sqlite :refer :all]))
 
-(deftest a-test
-  (testing "FIXME, I fail."
-    (is (= 0 1))))
+(deftest persist-ride-test
+  (testing "Persist ride test"
+    (let [res (parse-dir 2015 "../motodata/data")
+          ride (->> res first :results first)
+          ctx (->> res first :context)
+          ]
+      (is (> (persist-ride ride ctx) 0)))))
