@@ -42,7 +42,7 @@
 
 (def cli-options
   ;; An option with a required argument
-  [["-dry" nil "Dry run" :id :dry, :default true]
+  [["-dry" "--dry-run DRY" "Dry run" :id :dry, :default true]
    ["-f" nil "File to parse" :id :file, :default nil]
    ["-y" "--year YEAR" "Start year"
     :id :year
@@ -61,11 +61,8 @@
   (let [{{dry :dry year :year}
          :options info :summary} (parse-opts args cli-options)]
     (with-open [o (clojure.java.io/writer "process-log")]
-      (doseq [res (->> "data"
+      (doseq [res (->> "../motodata/data"
                        (parse-dir year)
-                       #(if dry
-                          %
-                          (map persist-result %))
-                       )]
+                       (map persist-result))]
         (.write o (str res))))))
 

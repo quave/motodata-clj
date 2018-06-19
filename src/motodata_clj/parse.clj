@@ -2,7 +2,8 @@
   (:require [clojure.string :as s]
             [motodata-clj.sqlite :as db]
             [motodata-clj.people-map :as pm]
-            [clojure.core.reducers :as r]))
+            [clojure.core.reducers :as r])
+  (:use clojure.pprint))
 
 (def people (reduce
               #(into %1 {[(:first_name %2) (:last_name %2)] %2})
@@ -26,19 +27,29 @@
     rider))
 
 (defn head-start? [line]
-  (and (re-find #"^\d{1,2}(\s|$)" line)
-       (not (re-find #"^18 Garage" line))))
+  (boolean
+    (and (re-find #"^\d{1,2}(\s|$)" line)
+         (not (re-find #"^18 Garage" line))
+         (not (re-find #"^1 Telefonica" line)))))
+
 (defn lap-line? [line]
   (re-find #"^[\d'.\sbPITunfinished]+\.[\d'.\sPITb]+$" line))
 
 (defn split-pages [text]
   (s/split text #"\f"))
 
+(def is-table-header
+  (some-fn
+    (partial re-find #"^T1 Time from finish")
+    (partial re-find #"Lap Lap Time")
+    (partial re-find #"^Free Practice")))
+
 (defn refine-page [page]
   (->> page
        s/split-lines
        (drop-while #(not (head-start? %)))
-       (take-while #(not (re-find #"^Page" %)))))
+       (take-while #(not (re-find #"^Page" %)))
+       (filter (complement is-table-header))))
 
 (defn split-riders [lines]
   (->> lines
@@ -132,10 +143,12 @@
           {:raw-head hl
            :laps (map parse-lap ls)}))
       (catch Exception e
-        (merge rider {:id nil :error (.getMessage e)})))))
+        (pprint e)
+        (assoc rider :error (.getMessage e))))))
 
 (defn is-ride-valid [ride]
-  (boolean (:id ride)))
+  (boolean (and (:id ride)
+                (not (:error ride)))))
 
 (defn parse [file-name]
   (->> file-name

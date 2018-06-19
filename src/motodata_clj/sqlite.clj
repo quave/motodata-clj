@@ -20,7 +20,7 @@
   (let [wrapped (if (seq? objects) objects (vector objects))
         enriched (map add-dates wrapped)]
     (println (str "insert " table))
-    (pprint enriched)
+    (println enriched)
     (get-result
       (jdbc/insert-multi! db-spec table enriched))))
 
