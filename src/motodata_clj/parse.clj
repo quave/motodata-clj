@@ -11,15 +11,17 @@
 
 (defn find-person
   [{f :first_name l :last_name}]
-  (if-let [p (get people (pm/remap f l))]
-    p
-    (->>
-      (keys people)
-      (filter #(let [[fir las] %]
-              (and (s/starts-with? fir f)
-                   (s/starts-with? las l))))
-      first
-      (get people))))
+  (if (and f l)
+    (if-let [p (get people (pm/remap f l))]
+      p
+      (->>
+        (keys people)
+        (filter #(let [[fir las] %]
+                (and (s/starts-with? fir f)
+                     (s/starts-with? las l))))
+        first
+        (get people)))
+    nil))
 
 (defn enrich-rider [rider]
   (if-let [db-rider (find-person rider)]
@@ -29,8 +31,7 @@
 (defn head-start? [line]
   (boolean
     (and (re-find #"^\d{1,2}(\s|$)" line)
-         (not (re-find #"^18 Garage" line))
-         (not (re-find #"^1 Telefonica" line)))))
+         (not (re-find #"^18 Garage" line)))))
 
 (defn lap-line? [line]
   (re-find #"^[\d'.\sbPITunfinished]+\.[\d'.\sPITb]+$" line))
@@ -38,18 +39,12 @@
 (defn split-pages [text]
   (s/split text #"\f"))
 
-(def is-table-header
-  (some-fn
-    (partial re-find #"^T1 Time from finish")
-    (partial re-find #"Lap Lap Time")
-    (partial re-find #"^Free Practice")))
-
 (defn refine-page [page]
   (->> page
        s/split-lines
+       (drop-while #(not (re-find #"Lap Lap Time" %)))
        (drop-while #(not (head-start? %)))
-       (take-while #(not (re-find #"^Page" %)))
-       (filter (complement is-table-header))))
+       (take-while #(not (re-find #"^Page" %)))))
 
 (defn split-riders [lines]
   (->> lines
@@ -71,8 +66,10 @@
              )+\s?
            )\s
            (?<last>
-           [\u00C0-\u01FF'\-A-Z\s]+
+           [\u00C0-\u01FF'\-A-Zcn\s]+
            )\b" head)]
+    (comment println head)
+    (comment println n)
    {:first_name (-> f (or "") s/trim s/capitalize)
     :last_name (-> l (or "") s/trim s/capitalize)
     :number (Integer/parseInt n)
@@ -133,6 +130,7 @@
      :speed (parse-speed speed)}))
 
 (defn parse-rider [rider]
+  (comment pprint rider)
   (let [part (partition-by lap-line? rider)
         hl (s/join " " (first part))
         ls (-> part rest flatten)]
@@ -144,12 +142,13 @@
            :laps (map parse-lap ls)}))
       (catch Exception e
         (pprint e)
-        (assoc rider :error (.getMessage e))))))
+        {:error (.getMessage e) :lines rider }))))
 
 (defn is-ride-valid [ride]
   (boolean (and (:id ride)
                 (not (:error ride)))))
 
+(comment ->> file slurp split-pages (map refine-page) flatten split-riders (map parse-riders))
 (defn parse [file-name]
   (->> file-name
     slurp

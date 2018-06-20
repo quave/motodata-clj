@@ -19,13 +19,13 @@
 (defn insert [table objects]
   (let [wrapped (if (seq? objects) objects (vector objects))
         enriched (map add-dates wrapped)]
-    (println (str "insert " table))
-    (println enriched)
+    (comment println (str "insert " table))
+    (comment println enriched)
     (get-result
       (jdbc/insert-multi! db-spec table enriched))))
 
 (defn db-query [sql]
-  (println (str "query " sql))
+  (comment println (str "query " sql))
   (jdbc/query db-spec sql))
 
 (defn extract-rider [ride context]

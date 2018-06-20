@@ -38,11 +38,12 @@
   (map process-file (files/list-files dir-name start-year)))
 
 (defn persist-result [{:keys [context results]}]
-   (map #(db/persist-ride % context) results))
+  (println (str "persist " (count results) context))
+  (map #(db/persist-ride % context) results))
 
 (def cli-options
   ;; An option with a required argument
-  [["-dry" "--dry-run DRY" "Dry run" :id :dry, :default true]
+  [["-dry" "--dry" "Dry run" :id :dry]
    ["-f" nil "File to parse" :id :file, :default nil]
    ["-y" "--year YEAR" "Start year"
     :id :year
@@ -57,12 +58,20 @@
        (map #(select-keys % [:first_name :last_name]))
        set))
 
+(defn cond-persist-result [dry]
+  (if dry identity persist-result))
+
+(defn process [dry year]
+  (with-open [o (clojure.java.io/writer "process-log" :append true)]
+    (let [path "../motodata/data"
+          pipeline (comp
+                     (partial map #(str % "\n"))
+                     (partial map (cond-persist-result dry))
+                     (partial parse-dir year))]
+      (doseq [r (pipeline path)] (.write o r) r))))
+
 (defn -main [& args]
-  (let [{{dry :dry year :year}
-         :options info :summary} (parse-opts args cli-options)]
-    (with-open [o (clojure.java.io/writer "process-log")]
-      (doseq [res (->> "../motodata/data"
-                       (parse-dir year)
-                       (map persist-result))]
-        (.write o (str res))))))
+  (let [{options :options info :summary} (parse-opts args cli-options)]
+    (pprint options)
+    (process (:dry options) (:year options))))
 
